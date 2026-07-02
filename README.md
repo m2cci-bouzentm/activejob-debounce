@@ -1,6 +1,6 @@
 # ActiveJob::Debounce
 
-Leading-edge debounce for ActiveJob. One job per debounce window, atomic Redis gating, crash recovery.
+Dispatch-time debounce for ActiveJob. One job per debounce window, atomic Redis gating, crash recovery.
 
 Works with **any ActiveJob backend**: Sidekiq, GoodJob, Solid Queue, Resque, etc.
 
@@ -141,7 +141,7 @@ Uses Redis `GETSET` for atomic dispatch-time gating:
 3. If old value is in the future → job already pending, skip
 4. `after_perform` deletes the key → opens the window for next cycle
 
-This is a **leading-edge** debounce: first event triggers execution after the delay. Subsequent events during the window are dropped.
+The first event triggers execution after the delay. Subsequent events during the window are dropped.
 
 ## Redis key format
 
