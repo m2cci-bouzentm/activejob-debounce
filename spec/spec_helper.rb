@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "bundler/setup"
-require "sidekiq-debouncer"
+require "activejob-debounce"
 require "active_job"
 require "globalid"
 
@@ -25,7 +25,7 @@ RSpec.configure do |config|
 
   config.before(:each) do
     # Reset configuration between tests
-    Sidekiq::Debouncer.reset_configuration!
+    ActiveJob::Debounce.reset_configuration!
 
     # Clear enqueued jobs
     ActiveJob::Base.queue_adapter.enqueued_jobs.clear if ActiveJob::Base.queue_adapter.respond_to?(:enqueued_jobs)
