@@ -23,6 +23,16 @@ class AnotherDebouncedJob < ActiveJob::Base
   def perform(*_args); end
 end
 
+class KeywordDebouncedJob < ActiveJob::Base
+  include ActiveJob::Debounce::Concern
+
+  debounce_for 2
+
+  def perform(id, mode:)
+    [id, mode]
+  end
+end
+
 RSpec.describe ActiveJob::Debounce::Concern do
   let(:mock_redis) { instance_double("Redis") }
 
@@ -74,9 +84,11 @@ RSpec.describe ActiveJob::Debounce::Concern do
       end
 
       it "queues a job" do
-        expect {
-          TestDebouncedJob.perform_debounce(123)
-        }.to have_enqueued_job(TestDebouncedJob).with(123)
+        TestDebouncedJob.perform_debounce(123)
+
+        enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |j| j[:job] == TestDebouncedJob }
+        expect(enqueued.size).to eq(1)
+        expect(enqueued.first[:args]).to eq([123])
       end
 
       it "sets the Redis key with expiry" do
@@ -91,9 +103,10 @@ RSpec.describe ActiveJob::Debounce::Concern do
       end
 
       it "does not queue another job" do
-        expect {
-          TestDebouncedJob.perform_debounce(123)
-        }.not_to have_enqueued_job(TestDebouncedJob)
+        TestDebouncedJob.perform_debounce(123)
+
+        enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |j| j[:job] == TestDebouncedJob }
+        expect(enqueued).to be_empty
       end
     end
 
@@ -103,9 +116,11 @@ RSpec.describe ActiveJob::Debounce::Concern do
       end
 
       it "queues a new job" do
-        expect {
-          TestDebouncedJob.perform_debounce(123)
-        }.to have_enqueued_job(TestDebouncedJob).with(123)
+        TestDebouncedJob.perform_debounce(123)
+
+        enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |j| j[:job] == TestDebouncedJob }
+        expect(enqueued.size).to eq(1)
+        expect(enqueued.first[:args]).to eq([123])
       end
     end
 
@@ -119,10 +134,11 @@ RSpec.describe ActiveJob::Debounce::Concern do
     end
 
     it "queues separate jobs for different arguments" do
-      call_count = 0
-      allow(mock_redis).to receive(:getset) do
-        call_count += 1
-        call_count.odd? ? nil : (Time.now.to_i + 100).to_s
+      store = {}
+      allow(mock_redis).to receive(:getset) do |key, value|
+        old = store[key]
+        store[key] = value
+        old
       end
 
       5.times { TestDebouncedJob.perform_debounce(123) }
@@ -130,6 +146,20 @@ RSpec.describe ActiveJob::Debounce::Concern do
 
       enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |j| j[:job] == TestDebouncedJob }
       expect(enqueued.size).to eq(2)
+    end
+  end
+
+  describe "keyword arguments" do
+    it "preserves keyword arguments through the serialization round trip" do
+      allow(mock_redis).to receive(:getset).and_return(nil)
+
+      KeywordDebouncedJob.perform_debounce(1, mode: "fast")
+
+      enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.find { |j| j[:job] == KeywordDebouncedJob }
+      expect(enqueued).not_to be_nil
+
+      args = ActiveJob::Arguments.deserialize(enqueued[:args])
+      expect(KeywordDebouncedJob.new.perform(*args)).to eq([1, "fast"])
     end
   end
 

@@ -73,6 +73,7 @@ module ActiveJob
 
           set(wait: delay + buffer).perform_later(*params)
         end
+        ruby2_keywords :perform_debounce
 
         # Generate a unique Redis key for this job + arguments combination.
         #
